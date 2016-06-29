@@ -336,17 +336,29 @@ module Avro
     class SnappyCodec
       def codec_name; 'snappy'; end
 
-      def decompress(data)
+      def decompress(block)
         load_snappy!
-        Snappy.inflate(data)
+        checksum = block.byteslice(-4..-1)
+        data = block.byteslice(0...-4)
+        uncompressed = Snappy.inflate(data)
+        check_checksum(uncompressed, checksum)
+        uncompressed
       end
 
       def compress(data)
         load_snappy!
-        Snappy.deflate(data)
+        Snappy.deflate(data) + make_checksum(data)
       end
 
       private
+
+      def check_checksum(data, checksum)
+        raise DataFileError, "Checksum failure" if (Zlib.crc32(data) != checksum.unpack("N").first)
+      end
+
+      def make_checksum(data)
+        [Zlib.crc32(data)].pack("N").force_encoding("BINARY")
+      end
 
       def load_snappy!
         require 'snappy' unless defined?(Snappy)
